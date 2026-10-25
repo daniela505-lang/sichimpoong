@@ -166,6 +166,10 @@ const [editPreviewTitle, setEditPreviewTitle] = useState("");
 const [editContent, setEditContent] = useState("");
 const [editPassword, setEditPassword] = useState("");
 
+const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
+const [deletePassword, setDeletePassword] = useState("");
+
+
   const [newCategory, setNewCategory] = useState("연애/사랑");
   const [newComment, setNewComment] = useState("");
 
@@ -195,6 +199,10 @@ const [editPassword, setEditPassword] = useState("");
 async function openPost(id: number) {
   setSelectedId(id);
   setWriting(false);
+  
+setDeleteTargetId(null);
+setDeletePassword("");
+  
   setNewComment("");
   
   const { error: viewError } = await supabase.rpc(
@@ -510,10 +518,19 @@ async function deletePost(id: number) {
     return;
   }
 
-  const password = prompt("게시글 비밀번호를 입력해 줘!");
-  
 
-  if (password === null) return;
+setDeleteTargetId(id);
+setDeletePassword("");
+return;
+
+
+}
+
+async function confirmDeletePost() {
+  if (deleteTargetId === null) return;
+
+  const id = deleteTargetId;
+  const password = deletePassword;
 
   if (!password) {
     alert("비밀번호를 입력해 줘!");
@@ -522,13 +539,16 @@ async function deletePost(id: number) {
 
   if (!confirm("정말 이 게시글을 삭제할까?")) return;
 
+
   try {
     const response = await fetch(`/api/posts/${id}`, {
       method: "DELETE",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ password }),
+      
+body: JSON.stringify({ password: deletePassword }),
+
     });
 
     const result = await response.json();
@@ -796,6 +816,43 @@ function goHome(category = "전체글") {
 >
   삭제하기
 </button>
+
+{deleteTargetId === selectedPost.id && (
+  <div className="mt-4 rounded-lg border border-gray-300 p-4">
+    <p className="mb-3 text-sm font-bold text-gray-700">
+      게시글을 삭제하려면 비밀번호를 입력해 줘!
+    </p>
+
+    <input
+      type="password"
+      value={deletePassword}
+      onChange={(e) => setDeletePassword(e.target.value)}
+      placeholder="게시글 비밀번호"
+      className="w-full rounded border border-gray-300 p-3 text-black"
+    />
+
+    <div className="mt-3 flex gap-2">
+      <button
+        type="button"
+        onClick={confirmDeletePost}
+        className="rounded bg-red-500 px-4 py-2 text-sm text-white"
+      >
+        삭제 확인
+      </button>
+
+      <button
+        type="button"
+        onClick={() => {
+          setDeleteTargetId(null);
+          setDeletePassword("");
+        }}
+        className="rounded bg-gray-200 px-4 py-2 text-sm text-gray-700"
+      >
+        취소
+      </button>
+    </div>
+  </div>
+)}
 
 
             <div className="border-b-2 border-black pb-5">
