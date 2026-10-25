@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 type Post = {
   id: number;
+  hasPassword?: boolean;
   category: string;
   title: string;
   
@@ -31,7 +32,7 @@ const categories = [
 const samplePosts: Post[] = [
   {
     id: 1,
-    category: "연애&사랑",
+    category: "연애/사랑",
     title: "남친이랑 3년째 연애 중인데 진짜 달라짐...",
     content: "남친이 원래 회피형이었는데 요즘 완전히 달라졌어. 다들 어떻게 생각해?",
     views: 1250,
@@ -41,7 +42,7 @@ const samplePosts: Post[] = [
   },
   {
     id: 2,
-    category: "결혼&가족",
+    category: "결혼/가족",
     title: "결혼 준비하면서 처음 알게 된 사실",
     content: "결혼 준비가 생각보다 쉽지 않네. 다들 이런 경험 있어?",
     views: 980,
@@ -51,7 +52,7 @@ const samplePosts: Post[] = [
   },
   {
     id: 3,
-    category: "회사&인간관계",
+    category: "회사/인간관계",
     title: "회사에서 이런 말 들으면 기분 어떨 것 같아?",
     content: "오늘 회사에서 조금 당황스러운 말을 들었어.",
     views: 740,
@@ -61,7 +62,7 @@ const samplePosts: Post[] = [
   },
   {
     id: 4,
-    category: "돈&소비",
+    category: "돈/소비",
     title: "월급 300만 원이면 저축 얼마나 해?",
     content: "생활비 빼고 다들 얼마나 저축하는지 궁금해.",
     views: 620,
@@ -81,7 +82,7 @@ const samplePosts: Post[] = [
   },
   {
     id: 6,
-    category: "취향&라이프스타일",
+    category: "취향/라이프스타일",
     title: "요즘 가장 만족하는 취미 하나씩 말해줘",
     content: "다들 어떤 취미를 즐기고 있어?",
     views: 410,
@@ -116,7 +117,7 @@ for (const like of likeData ?? []) {
     const { data, error } = await supabase
       .from("posts")
       
-.select("id, category, title, preview_title, content, views, likes, created_at")
+.select("id, category, title, preview_title, content, views, likes, created_at, has_password")
 
       .order("created_at", { ascending: false });
 
@@ -127,6 +128,7 @@ for (const like of likeData ?? []) {
 
     const savedPosts: Post[] = (data ?? []).map((post) => ({
       id: post.id,
+      hasPassword: post.has_password,
       category: post.category,
       title: post.title,
       
@@ -156,7 +158,15 @@ previewTitle: post.preview_title ?? "",
 const [newPreviewTitle, setNewPreviewTitle] = useState("");
 
   const [newContent, setNewContent] = useState("");
-  const [newCategory, setNewCategory] = useState("연애&사랑");
+  const [newPassword, setNewPassword] = useState("");
+  
+const [editingPostId, setEditingPostId] = useState<number | null>(null);
+const [editTitle, setEditTitle] = useState("");
+const [editPreviewTitle, setEditPreviewTitle] = useState("");
+const [editContent, setEditContent] = useState("");
+const [editPassword, setEditPassword] = useState("");
+
+  const [newCategory, setNewCategory] = useState("연애/사랑");
   const [newComment, setNewComment] = useState("");
 
   const bestPosts = [...posts]
@@ -169,7 +179,8 @@ const [newPreviewTitle, setNewPreviewTitle] = useState("");
       if (active === "BEST 글") {
         return bestPosts.some((best) => best.id === post.id);
       }
-      return post.category === active;
+      return post.category.replace(/&/g, "/").replace(/\s+/g, "") ===
+       active.replace(/&/g, "/").replace(/\s+/g, "");
     })
     .filter((post) =>
       (post.title + " " + post.content)
@@ -234,69 +245,75 @@ if (fetchError) {
 
 
 
-  async function createPost() {
-    if (!newTitle.trim() || !newContent.trim()) {
-      alert("제목과 내용을 입력해줘!");
-      return;
-    }
+ 
+async function createPost() {
+  if (!newTitle.trim() || !newContent.trim()) {
+    alert("제목과 내용을 입력해줘!");
+    return;
+  }
 
-    const post: Post = {
-      id: Date.now(),
-      category: newCategory,
-      title: newTitle.trim(),
-      
-previewTitle: newPreviewTitle.trim(),
+  if (newPassword.length < 8 || newPassword.length > 72) {
+    alert("비밀번호는 8~72자로 입력해줘!");
+    return;
+  }
 
-      content: newContent.trim(),
-      views: 0,
-      likes: 0,
-      comments: [],
-      createdAt: new Date().toLocaleTimeString("ko-KR", {
-        hour: "2-digit",
-        minute: "2-digit",
+  const post: Post = {
+    id: Date.now(),
+    hasPassword: true,
+    category: newCategory,
+    title: newTitle.trim(),
+    previewTitle: newPreviewTitle.trim(),
+    content: newContent.trim(),
+    views: 0,
+    likes: 0,
+    comments: [],
+    createdAt: new Date().toLocaleTimeString("ko-KR", {
+      hour: "2-digit",
+      minute: "2-digit",
+    }),
+  };
+
+  try {
+    const response = await fetch("/api/posts", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        category: newCategory,
+        title: newTitle.trim(),
+        previewTitle: newPreviewTitle.trim(),
+        content: newContent.trim(),
+        password: newPassword,
       }),
-    };
+    });
 
-    
-        const { data: authData, error: authError } =
-      await supabase.auth.signInAnonymously();
+    const result = await response.json();
 
-    if (authError || !authData.user) {
-      alert("익명 인증에 실패했어: " + (authError?.message ?? ""));
+    if (!response.ok) {
+      alert(result.error || "게시글 저장에 실패했어!");
       return;
     }
 
-    const { data, error } = await supabase
-      .from("posts")
-      .insert({
-        category: post.category,
-        title: post.title,
-          preview_title: newPreviewTitle.trim() || null,
-        content: post.content,
-        author_id: authData.user.id,
-      })
-      .select("id")
-      .single();
+    post.id = result.id;
 
-    if (error || !data) {
-      alert("게시글 저장 실패: " + (error?.message ?? ""));
-      return;
-    }
-
-    post.id = data.id;
-    
-setPosts((prev) => [post, ...prev]);
+    setPosts((prev) => [post, ...prev]);
 
     setNewTitle("");
     setNewPreviewTitle("");
     setNewContent("");
+    setNewPassword("");
     setWriting(false);
     setActive("전체글");
     setSelectedId(post.id);
+  } catch (error) {
+    console.error("게시글 작성 오류:", error);
+    alert("서버에 연결하지 못했어!");
   }
+}
 
-  
 async function likePost(id: number) {
+
   const {
     data: { user },
     error: authError,
@@ -373,43 +390,165 @@ async function addComment(id: number) {
 
 
 
+
+function startEditing(post: Post) {
+  setEditingPostId(post.id);
+  setEditTitle(post.title);
+  setEditPreviewTitle(post.previewTitle || "");
+  setEditContent(post.content);
+  setEditPassword("");
+}
     
+
+async function saveEditedPost() {
+  if (editingPostId === null) return;
+
+  if (!editTitle.trim() || !editContent.trim()) {
+    alert("제목과 내용을 입력해 줘!");
+    return;
+  }
+
+  if (editPassword.length < 8 || editPassword.length > 72) {
+    alert("게시글 비밀번호를 확인해 줘!");
+    return;
+  }
+
+  try {
+    const response = await fetch(`/api/posts/${editingPostId}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        password: editPassword,
+        title: editTitle,
+        previewTitle: editPreviewTitle,
+        content: editContent,
+      }),
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      alert(result.error || "게시글 수정에 실패했어!");
+      return;
+    }
+
+    setPosts((prev) =>
+      prev.map((post) =>
+        post.id === editingPostId
+          ? {
+              ...post,
+              title: editTitle.trim(),
+              previewTitle: editPreviewTitle.trim(),
+              content: editContent.trim(),
+            }
+          : post
+      )
+    );
+
+    setEditingPostId(null);
+    setEditPassword("");
+    alert("게시글이 수정됐어!");
+  } catch (error) {
+    console.error("게시글 수정 오류:", error);
+    alert("서버에 연결하지 못했어!");
+  }
+}
+
 async function deletePost(id: number) {
+  
+
+  
+  const targetPost = posts.find((post) => post.id === id);
+
+  if (!targetPost) {
+    alert("게시글을 찾을 수 없어!");
+    return;
+  }
+
+  // 비밀번호가 없는 기존 게시글은 기존 작성자 인증으로 삭제
+  if (!targetPost.hasPassword) {
+    if (!confirm("정말 이 게시글을 삭제할까?")) return;
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        alert("기존 게시글 작성자 인증 정보를 찾지 못했어!");
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("posts")
+        .delete()
+        .eq("id", id)
+        .eq("author_id", user.id)
+        .select("id");
+
+      if (error) {
+        console.error("기존 글 삭제 오류:", error.message);
+        alert("게시글을 삭제하지 못했어!");
+        return;
+      }
+
+      if (!data || data.length === 0) {
+        alert("작성자 본인만 삭제할 수 있어!");
+        return;
+      }
+
+      setPosts((prev) => prev.filter((post) => post.id !== id));
+      setSelectedId(null);
+      alert("게시글이 삭제됐어!");
+    } catch (error) {
+      console.error("기존 글 삭제 오류:", error);
+      alert("게시글 삭제 중 오류가 발생했어!");
+    }
+
+    return;
+  }
+
+  const password = prompt("게시글 비밀번호를 입력해 줘!");
+  
+
+  if (password === null) return;
+
+  if (!password) {
+    alert("비밀번호를 입력해 줘!");
+    return;
+  }
+
   if (!confirm("정말 이 게시글을 삭제할까?")) return;
 
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
+  try {
+    const response = await fetch(`/api/posts/${id}`, {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ password }),
+    });
 
-  if (authError || !user) {
-    alert("작성자 인증을 확인하지 못했어!");
-    return;
+    const result = await response.json();
+
+    if (!response.ok) {
+      alert(result.error || "게시글 삭제에 실패했어!");
+      return;
+    }
+
+    setPosts((prev) => prev.filter((post) => post.id !== id));
+    setSelectedId(null);
+    setWriting(false);
+
+    alert("게시글이 삭제됐어!");
+  } catch (error) {
+    console.error("게시글 삭제 오류:", error);
+    alert("서버에 연결하지 못했어!");
   }
-
-  const { data, error } = await supabase
-    .from("posts")
-    .delete()
-    .eq("id", id)
-    .eq("author_id", user.id)
-    .select("id");
-
-  if (error) {
-    alert("삭제 실패: " + error.message);
-    return;
-  }
-
-  if (!data || data.length === 0) {
-    alert("본인이 작성한 게시글만 삭제할 수 있어!");
-    return;
-  }
-
-  setPosts((prev) => prev.filter((p) => p.id !== id));
-  setSelectedId(null);
-  setWriting(false);
-
-  alert("게시글이 삭제됐어!");
 }
+
 function goHome(category = "전체글") {
 
     setActive(category);
@@ -598,7 +737,24 @@ function goHome(category = "전체글") {
               className="mt-3 h-72 w-full resize-y border border-gray-300 p-3 outline-none"
             />
 
-            <div className="mt-5 flex justify-end gap-3">
+            
+            
+<div className="mt-3">
+  <input
+    type="password"
+    value={newPassword}
+    onChange={(e) => setNewPassword(e.target.value)}
+    placeholder="게시글 비밀번호 (8자 이상)"
+    minLength={8}
+    maxLength={72}
+    autoComplete="new-password"
+    className="w-full border border-gray-300 p-3 outline-none"
+  />
+  <p className="mt-2 text-xs text-gray-400">
+    게시글을 수정하거나 삭제할 때 필요한 비밀번호입니다.
+  </p>
+</div>
+<div className="mt-5 flex justify-end gap-3">
               <button
                 onClick={() => setWriting(false)}
                 className="border border-gray-300 px-6 py-3"
@@ -623,7 +779,17 @@ function goHome(category = "전체글") {
             >
               ← 목록으로
             </button>
-            
+
+          
+{selectedPost.hasPassword && (
+  <button
+    onClick={() => startEditing(selectedPost)}
+    className="ml-4 text-sm text-gray-400 hover:text-blue-500"
+  >
+    수정하기
+  </button>
+)}
+  
 <button
   onClick={() => deletePost(selectedPost.id)}
   className="ml-4 text-sm text-gray-400 hover:text-red-500"
@@ -636,6 +802,64 @@ function goHome(category = "전체글") {
               <p className="mb-3 text-sm text-red-500">
                 {selectedPost.category}
               </p>
+              
+{editingPostId === selectedPost.id && (
+  <div className="my-6 space-y-3 rounded-lg border border-gray-300 p-4">
+    <h3 className="font-bold">게시글 수정</h3>
+
+    <input
+      type="text"
+      value={editTitle}
+      onChange={(e) => setEditTitle(e.target.value)}
+      placeholder="제목"
+      maxLength={200}
+      className="w-full rounded border border-gray-300 p-3 text-black"
+    />
+
+    <input
+      type="text"
+      value={editPreviewTitle}
+      onChange={(e) => setEditPreviewTitle(e.target.value)}
+      placeholder="목록에 표시할 제목 (선택)"
+      maxLength={200}
+      className="w-full rounded border border-gray-300 p-3 text-black"
+    />
+
+    <textarea
+      value={editContent}
+      onChange={(e) => setEditContent(e.target.value)}
+      placeholder="내용"
+      maxLength={10000}
+      rows={8}
+      className="w-full rounded border border-gray-300 p-3 text-black"
+    />
+
+    <input
+      type="password"
+      value={editPassword}
+      onChange={(e) => setEditPassword(e.target.value)}
+      placeholder="게시글 비밀번호"
+      className="w-full rounded border border-gray-300 p-3 text-black"
+    />
+
+    <button
+      type="button"
+      onClick={() => setEditingPostId(null)}
+      className="mr-3 rounded border px-4 py-2 text-sm"
+    >
+      취소
+    </button>
+
+    <button
+      type="button"
+      onClick={saveEditedPost}
+      className="rounded bg-black px-4 py-2 text-sm text-white"
+    >
+      수정 내용 저장
+    </button>
+  </div>
+)}
+
               <h2 className="text-2xl font-bold">
                 {selectedPost.title}
               </h2>
