@@ -322,10 +322,18 @@ async function createPost() {
 
 async function likePost(id: number) {
 
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
+
+let {
+  data: { user },
+  error: authError,
+} = await supabase.auth.getUser();
+
+if (!user) {
+  const { data, error } = await supabase.auth.signInAnonymously();
+  user = data.user;
+  authError = error;
+}
+
 
   if (authError || !user) {
     alert("익명 인증을 확인하지 못했어. 새로고침 후 다시 시도해 줘!");
